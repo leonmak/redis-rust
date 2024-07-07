@@ -1,39 +1,69 @@
+#![allow(dead_code)]
+
 use std::io::{Read, Result, Write};
 use std::net::{TcpListener, TcpStream};
+
+fn is_connection_open(stream: &TcpStream) -> bool {
+    stream.peer_addr().is_ok()
+}
+
+fn handle_stream(stream: &mut TcpStream) -> Result<usize> {
+    // Note: redis-cli does not send EOF, so it is blocked on stream.read()
+
+    // stream.read_to_string(&mut buffer)?;
+    // println!("buffer: {}", buffer);
+
+    // Read to vec then convert to string
+    let mut data = Vec::new();
+    data.clear();
+    let mut buf = [0u8; 100];
+    let mut bytes_read = 0;
+    loop {
+        let n = stream.read(&mut buf)?;
+        bytes_read += n;
+        data.extend_from_slice(&buf[..n]);
+
+        // stop reading if the \r\n is sent
+        let last_two: &_ = &data[data.len() - 2..];
+        if last_two == &[b'\r', b'\n'] {
+            break;
+        }
+        // println!("last two: {:?}", last_two);
+    }
+    println!("{:?} bytes read", bytes_read);
+
+    // Split and process each line
+    let buffer = String::from_utf8(data).unwrap();
+    let mut bytes_written = 0;
+    let mut iter = buffer.split("\r\n");
+    // e.g. *12 = 12 commands
+    let mut num_cmds = iter.next().unwrap()[1..].parse::<i32>().unwrap();
+    println!("NUM_CMDS, {}", num_cmds);
+    while num_cmds > 0 {
+        num_cmds -= 1;
+        let _ = iter.next(); // ignore cmd_len, e.g. $4 for PING
+        let cmd = iter.next().unwrap();
+        println!("CMD: {}", cmd);
+        let resp_s = match cmd {
+            "PING" => "+PONG\r\n",
+            _ => "-ERR unknown command\r\n",
+        };
+        println!(">> {}", resp_s);
+        bytes_written += stream.write(resp_s.as_bytes()).unwrap();
+    }
+    return Ok(bytes_written);
+}
 
 fn main() {
     // You can use print statements as follows for debugging, they'll be visible when running tests.
     println!("Logs from your program will appear here!");
 
-    fn handle_stream(mut stream: TcpStream) -> Result<usize> {
-        let mut buf: [u8; 512] = [0; 512];
-        stream.read(&mut buf).unwrap();
-
-        let cmd_str = std::str::from_utf8(&buf).unwrap();
-        println!("RECEIVED command: `{}`", cmd_str);
-        let resp_str: &str = match cmd_str {
-            "PING" => "+PONG\r\n",
-            _ => "-ERR unknown command\r\n",
-        };
-
-        println!("RESPONDED: `{}`", resp_str);
-        let cmd_resp = resp_str.as_bytes();
-        let written = stream.write(cmd_resp)?;
-        return Ok(written);
-    }
-
     let listener = TcpListener::bind("127.0.0.1:6379").unwrap();
     for stream in listener.incoming() {
-        match stream {
-            Ok(mut stream) => {
-                println!("accepted new connection");
-                // let num_written = handle_stream(stream).unwrap();
-                // println!("{} bytes written", num_written);
-                stream.write("+PONG\r\n".as_bytes()).unwrap();
-                continue;
-            }
-            Err(e) => {
-                println!("error: {}", e);
+        if let Ok(mut s) = stream {
+            println!("Accepted new connection");
+            while is_connection_open(&s) {
+                let _ = handle_stream(&mut s);
             }
         }
     }
