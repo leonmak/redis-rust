@@ -1,13 +1,13 @@
 #![allow(dead_code)]
 
-use std::io::{Read, Result, Write};
+use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
 
 fn is_connection_open(stream: &TcpStream) -> bool {
     stream.peer_addr().is_ok()
 }
 
-fn handle_stream(stream: &mut TcpStream) -> Result<usize> {
+fn handle_stream(stream: &mut TcpStream) -> Option<usize> {
     // Note: redis-cli does not send EOF, so it is blocked on stream.read()
 
     // stream.read_to_string(&mut buffer)?;
@@ -15,17 +15,20 @@ fn handle_stream(stream: &mut TcpStream) -> Result<usize> {
 
     // Read to vec then convert to string
     let mut data = Vec::new();
-    data.clear();
-    let mut buf = [0u8; 100];
+    let mut buf = [0u8; 10];
     let mut bytes_read = 0;
+    println!("Reading data...");
     loop {
-        let n = stream.read(&mut buf)?;
+        let n = stream.read(&mut buf).ok()?;
+        println!("{} bytes read", n);
+        if n == 0 {
+            return None;
+        }
         bytes_read += n;
         data.extend_from_slice(&buf[..n]);
 
         // stop reading if the \r\n is sent
-        let last_two: &_ = &data[data.len() - 2..];
-        if last_two == &[b'\r', b'\n'] {
+        if &data[data.len() - 2..] == &[b'\r', b'\n'] {
             break;
         }
         // println!("last two: {:?}", last_two);
@@ -46,12 +49,12 @@ fn handle_stream(stream: &mut TcpStream) -> Result<usize> {
         println!("CMD: {}", cmd);
         let resp_s = match cmd {
             "PING" => "+PONG\r\n",
-            _ => "-ERR unknown command\r\n",
+            _ => "+OK\r\n",
         };
         println!(">> {}", resp_s);
         bytes_written += stream.write(resp_s.as_bytes()).unwrap();
     }
-    return Ok(bytes_written);
+    return Some(bytes_written);
 }
 
 fn main() {
@@ -63,7 +66,9 @@ fn main() {
         if let Ok(mut s) = stream {
             println!("Accepted new connection");
             while is_connection_open(&s) {
-                let _ = handle_stream(&mut s);
+                if handle_stream(&mut s) == None {
+                    break;
+                };
             }
         }
     }
