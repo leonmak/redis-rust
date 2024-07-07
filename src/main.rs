@@ -41,20 +41,31 @@ fn handle_stream(stream: &mut TcpStream) -> Option<usize> {
     let mut bytes_written = 0;
     let mut iter = buffer.split("\r\n");
     // e.g. *12 = 12 commands
-    let mut num_cmds = iter.next().unwrap()[1..].parse::<i32>().unwrap();
-    println!("NUM_CMDS, {}", num_cmds);
-    while num_cmds > 0 {
-        num_cmds -= 1;
-        let _ = iter.next(); // ignore cmd_len, e.g. $4 for PING
-        let cmd = iter.next().unwrap();
-        println!("CMD: {}", cmd);
-        let resp_s = match cmd {
-            "PING" => "+PONG\r\n",
-            _ => "+OK\r\n",
-        };
-        println!(">> {}", resp_s);
-        bytes_written += stream.write(resp_s.as_bytes()).unwrap();
+    let mut cmd_lines = iter.next().unwrap()[1..].parse::<i32>().unwrap();
+    cmd_lines -= 1;
+    println!("NUM_CMD_LINES, {}", cmd_lines);
+    let _ = iter.next(); // ignore cmd_len, e.g. $4 for PING
+    let cmd = iter.next().unwrap();
+    let mut resp_s = String::new();
+    if cmd == "PING" {
+        resp_s = "+PONG\r\n".to_owned();
     }
+
+    // parse args
+    while cmd_lines > 0 {
+        cmd_lines -= 1;
+        let _ = iter.next(); // ignore cmd_len, e.g. $4 for PING
+        let arg = iter.next().unwrap();
+        println!("ARG: {}", arg);
+        let resp_s_add = match cmd {
+            "ECHO" => format!("+{}\r\n", arg),
+            _ => "+OK\r\n".to_owned(),
+        };
+        resp_s.push_str(&resp_s_add);
+    }
+    println!(">> {}", resp_s);
+    bytes_written += stream.write(resp_s.as_bytes()).unwrap();
+
     return Some(bytes_written);
 }
 
