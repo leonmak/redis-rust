@@ -2,6 +2,7 @@
 
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
+use std::thread;
 
 fn is_connection_open(stream: &TcpStream) -> bool {
     stream.peer_addr().is_ok()
@@ -65,11 +66,13 @@ fn main() {
     for stream in listener.incoming() {
         if let Ok(mut s) = stream {
             println!("Accepted new connection");
-            while is_connection_open(&s) {
-                if handle_stream(&mut s) == None {
-                    break;
-                };
-            }
+            thread::spawn(move || {
+                while is_connection_open(&s) {
+                    if handle_stream(&mut s) == None {
+                        break;
+                    };
+                }
+            });
         }
     }
 }
