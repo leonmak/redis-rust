@@ -36,7 +36,7 @@ fn handle_stream(
 
     // Buffered Read - copy to vec then convert to string
     let mut data = Vec::new();
-    let mut buf = [0u8; 50];
+    let mut buf = [0u8; 422];
     let mut bytes_read = 0;
     println!("Reading data...");
     loop {
@@ -48,14 +48,14 @@ fn handle_stream(
         bytes_read += n;
         data.extend_from_slice(&buf[..n]);
 
-        // stop reading if the \r\n is sent
+        // stop reading if the \r\n is sent // stops before end with buf match \r\n
         if &data[data.len() - 2..] == &[b'\r', b'\n'] {
             break;
         }
         // println!("last two: {:?}", last_two);
     }
     println!("{:?} bytes read", bytes_read);
-    // println!("buffer: {:?}", String::from_utf8(Vec::from(buf)));
+    // println!("buffer: {:?}", String::from_utf8(data.clone()));
 
     // Split and process each line
     let buffer = String::from_utf8(data).unwrap();
