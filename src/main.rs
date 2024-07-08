@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::thread;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 fn is_connection_open(stream: &TcpStream) -> bool {
     stream.peer_addr().is_ok()
@@ -14,7 +15,21 @@ fn next_part(iter: &mut std::str::Split<&str>) -> String {
     iter.next().unwrap().to_owned()
 }
 
-fn handle_stream(stream: &mut TcpStream, map_store: &mut HashMap<String, String>) -> Option<usize> {
+fn time_now() -> u64 {
+    let now = SystemTime::now();
+    let duration_since_epoch = now
+        .duration_since(UNIX_EPOCH)
+        .expect("Failed to get duration since Unix epoch");
+
+    let millis = duration_since_epoch.as_millis() as u64;
+    millis
+}
+
+fn handle_stream(
+    stream: &mut TcpStream,
+    map_store: &mut HashMap<String, String>,
+    exp_store: &mut HashMap<String, u64>,
+) -> Option<usize> {
     // Note: redis-cli does not send EOF, so it is blocked on stream.read()
 
     // stream.read_to_string(&mut buffer)?;
@@ -47,8 +62,8 @@ fn handle_stream(stream: &mut TcpStream, map_store: &mut HashMap<String, String>
     let mut bytes_written = 0;
     let mut iter = buffer.split("\r\n");
     // e.g. *12 = 12 commands
-    let mut cmd_lines = iter.next().unwrap()[1..].parse::<i32>().unwrap();
-    println!("NUM_LINES, {}", cmd_lines);
+    let mut arg_lines = iter.next().unwrap()[1..].parse::<i32>().unwrap();
+    println!("NUM_LINES, {}", arg_lines);
 
     // Parse command
     let cmd = next_part(&mut iter);
@@ -61,27 +76,50 @@ fn handle_stream(stream: &mut TcpStream, map_store: &mut HashMap<String, String>
     }
 
     // Parse args
-    cmd_lines -= 1;
-    while cmd_lines > 0 {
-        cmd_lines -= 1;
+    arg_lines -= 1;
+    while arg_lines > 0 {
+        arg_lines -= 1;
         let arg = next_part(&mut iter);
         println!("ARG: {}", arg);
         let resp_s_arg = match cmd_str {
-            "ECHO" => arg,
+            "ECHO" => format!("+{}", arg.to_owned()),
             "GET" => {
                 let val = map_store.get(&arg).expect("NO VALUE");
-                val.to_owned()
+                let mut expired_val = false;
+                if let Some(exp) = exp_store.get(&arg) {
+                    expired_val = *exp < time_now();
+                }
+                let res = if expired_val {
+                    format!("-1")
+                } else {
+                    format!("+{}", val.to_owned())
+                };
+                res
             }
             "SET" => {
                 let val = next_part(&mut iter);
                 println!("VAL: {}", val);
-                cmd_lines -= 1;
+                arg_lines -= 1;
+                let key = arg.clone();
                 map_store.insert(arg, val);
-                "OK".to_owned()
+
+                let has_more = arg_lines > 0;
+                if has_more {
+                    let _ = next_part(&mut iter);
+                    let exp_in_ms = next_part(&mut iter)
+                        .parse::<u64>()
+                        .expect("Expiry not found");
+                    println!("EXPIRY: {}", exp_in_ms);
+                    arg_lines -= 1;
+                    arg_lines -= 1;
+                    let next_inst = time_now() + exp_in_ms;
+                    exp_store.insert(key, next_inst);
+                }
+                "+OK".to_owned()
             }
-            _ => "OK".to_owned(),
+            _ => "+OK".to_owned(),
         };
-        let res_str = format!("+{}\r\n", resp_s_arg);
+        let res_str = format!("{}\r\n", resp_s_arg);
         resp_s.push_str(&res_str);
     }
     println!(">> {}", resp_s);
@@ -99,9 +137,11 @@ fn main() {
         if let Ok(mut s) = stream {
             println!("Accepted new connection");
             thread::spawn(move || {
-                let mut map: HashMap<String, String> = HashMap::new();
+                let mut exp_map: HashMap<String, u64> = HashMap::new();
+                let mut val_map: HashMap<String, String> = HashMap::new();
                 while is_connection_open(&s) {
-                    if handle_stream(&mut s, &mut map) == None {
+                    let res = handle_stream(&mut s, &mut val_map, &mut exp_map);
+                    if res == None {
                         break;
                     };
                 }
