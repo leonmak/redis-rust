@@ -90,7 +90,7 @@ fn handle_stream(
                     expired_val = *exp < time_now();
                 }
                 let res = if expired_val {
-                    format!("-1")
+                    format!("$-1")
                 } else {
                     format!("+{}", val.to_owned())
                 };
