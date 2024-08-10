@@ -16,14 +16,20 @@ fn main() {
     let addr = format!("{}:{}", args.ipaddr, args.port);
     println!("running on port: {}", args.port);
     let listener = TcpListener::bind(addr).unwrap();
+    let has_master = !args.master_addr.is_empty();
+    if has_master {
+        println!("replica of master - {}", args.master_addr);
+    };
     for stream in listener.incoming() {
         if let Ok(mut s) = stream {
             println!("Accepted new connection");
             thread::spawn(move || {
                 let mut exp_map: HashMap<String, u64> = HashMap::new();
                 let mut val_map: HashMap<String, String> = HashMap::new();
+                let role = if has_master { "slave" } else { "master" };
+                let info_kv = vec!["role", role];
                 while s.peer_addr().is_ok() {
-                    let res = handle_stream(&mut s, &mut val_map, &mut exp_map);
+                    let res = handle_stream(&mut s, &mut val_map, &mut exp_map, &info_kv);
                     if res == None {
                         break;
                     };

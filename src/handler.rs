@@ -44,7 +44,7 @@ fn encode_bulk_str(input: &str) -> String {
     output
 }
 
-fn bulk_str_key_value(kv: Vec<&str>) -> String {
+fn bulk_str_key_value(kv: &Vec<&str>) -> String {
     let kv: Vec<String> = kv.chunks(2).map(|chunk| chunk.to_vec().join(":")).collect();
     let payload = kv.join("\r\n");
     format!("${}\r\n{}", payload.len(), payload)
@@ -54,6 +54,7 @@ pub fn handle_stream(
     stream: &mut TcpStream,
     map_store: &mut HashMap<String, String>,
     exp_store: &mut HashMap<String, u64>,
+    info_kv_vec: &Vec<&str>,
 ) -> Option<usize> {
     // Note: redis-cli does not send EOF, so it is blocked on stream.read()
 
@@ -143,7 +144,7 @@ pub fn handle_stream(
                 }
                 "+OK".to_owned()
             }
-            "INFO" => bulk_str_key_value(vec!["role", "master"]),
+            "INFO" => bulk_str_key_value(info_kv_vec),
             _ => "+OK".to_owned(),
         };
         let res_str = format!("{}\r\n", resp_s_arg);
