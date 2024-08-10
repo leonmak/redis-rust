@@ -27,7 +27,15 @@ fn main() {
                 let mut exp_map: HashMap<String, u64> = HashMap::new();
                 let mut val_map: HashMap<String, String> = HashMap::new();
                 let role = if has_master { "slave" } else { "master" };
-                let info_kv = vec!["role", role];
+                let master_replica_id = "8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb";
+                let info_kv = vec![
+                    "role",
+                    role,
+                    "master_replid",
+                    master_replica_id,
+                    "master_repl_offset",
+                    "0",
+                ];
                 while s.peer_addr().is_ok() {
                     let res = handle_stream(&mut s, &mut val_map, &mut exp_map, &info_kv);
                     if res == None {
