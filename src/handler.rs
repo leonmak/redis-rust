@@ -3,6 +3,8 @@ use std::io::{Read, Write};
 use std::net::TcpStream;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use crate::message;
+
 fn next_part(iter: &mut std::str::Split<&str>) -> String {
     let _ = iter.next(); // ignore cmd_len, e.g. $4 for PING
     iter.next().unwrap().to_owned()
@@ -42,12 +44,6 @@ fn encode_bulk_str(input: &str) -> String {
     output.push_str("\r\n");
 
     output
-}
-
-fn bulk_str_key_value(kv: &Vec<&str>) -> String {
-    let kv: Vec<String> = kv.chunks(2).map(|chunk| chunk.to_vec().join(":")).collect();
-    let payload = kv.join("\r\n");
-    format!("${}\r\n{}", payload.len(), payload)
 }
 
 pub fn handle_stream(
@@ -144,7 +140,7 @@ pub fn handle_stream(
                 }
                 "+OK".to_owned()
             }
-            "INFO" => bulk_str_key_value(info_kv_vec),
+            "INFO" => message::kv_as_bulk_str(info_kv_vec),
             _ => "+OK".to_owned(),
         };
         let res_str = format!("{}\r\n", resp_s_arg);

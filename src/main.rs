@@ -1,14 +1,17 @@
 #![allow(dead_code)]
 
 use std::collections::HashMap;
-use std::net::TcpListener;
+use std::net::{TcpListener, TcpStream};
 use std::thread;
 
 mod args;
 mod handler;
+mod handshake;
+mod message;
 
 use args::parse_args;
 use handler::handle_stream;
+use handshake::send_ping;
 
 fn main() {
     let args = parse_args();
@@ -19,9 +22,11 @@ fn main() {
     let has_master = !args.master_addr.is_empty();
     if has_master {
         println!("replica of master - {}", args.master_addr);
+        let mut master_conn = TcpStream::connect(args.master_addr).unwrap();
+        send_ping(&mut master_conn);
     };
     for stream in listener.incoming() {
-        if let Ok(mut s) = stream {
+        if let Ok(mut stream) = stream {
             println!("Accepted new connection");
             thread::spawn(move || {
                 let mut exp_map: HashMap<String, u64> = HashMap::new();
@@ -36,8 +41,8 @@ fn main() {
                     "master_repl_offset",
                     "0",
                 ];
-                while s.peer_addr().is_ok() {
-                    let res = handle_stream(&mut s, &mut val_map, &mut exp_map, &info_kv);
+                while stream.peer_addr().is_ok() {
+                    let res = handle_stream(&mut stream, &mut val_map, &mut exp_map, &info_kv);
                     if res == None {
                         break;
                     };
