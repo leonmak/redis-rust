@@ -11,7 +11,7 @@ mod message;
 
 use args::parse_args;
 use handler::handle_stream;
-use handshake::send_ping;
+use handshake::handshake;
 
 fn main() {
     let args = parse_args();
@@ -23,7 +23,7 @@ fn main() {
     if has_master {
         println!("replica of master - {}", args.master_addr);
         let mut master_conn = TcpStream::connect(args.master_addr).unwrap();
-        send_ping(&mut master_conn);
+        handshake(&mut master_conn, args.port);
     };
     for stream in listener.incoming() {
         if let Ok(mut stream) = stream {
