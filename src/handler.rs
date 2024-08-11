@@ -141,6 +141,7 @@ pub fn handle_stream(
                 "+OK".to_owned()
             }
             "INFO" => message::kv_as_bulk_str(info_kv_vec),
+            "REPLCONF" => "+OK".to_owned(),
             _ => "+OK".to_owned(),
         };
         let res_str = format!("{}\r\n", resp_s_arg);
